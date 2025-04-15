@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Tickets</title>
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body {
+      padding-top: 60px;
+    }
+    .ticket-card {
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Login/Register -->
+    <div id="auth-section" class="text-center">
+      <h2>Iniciar Sesión</h2>
+      <input id="email" class="form-control my-2" placeholder="Correo electrónico">
+      <input id="password" type="password" class="form-control my-2" placeholder="Contraseña">
+      <button class="btn btn-primary" onclick="login()">Ingresar</button>
+      <button class="btn btn-secondary" onclick="register()">Registrarse</button>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" style="display:none">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Bienvenido, <span id="user-email"></span></h3>
+        <button class="btn btn-danger" onclick="logout()">Cerrar sesión</button>
+      </div>
+      <button class="btn btn-success mb-3" onclick="showCreateForm()">+ Crear Ticket</button>
+
+      <!-- Crear Ticket -->
+      <div id="create-ticket-form" style="display:none">
+        <input id="title" class="form-control my-1" placeholder="Título del ticket">
+        <textarea id="description" class="form-control my-1" placeholder="Descripción"></textarea>
+        <select id="priority" class="form-control my-1">
+          <option value="Alta">Alta</option>
+          <option value="Media">Media</option>
+          <option value="Baja">Baja</option>
+        </select>
+        <input id="type" class="form-control my-1" placeholder="Tipo de pedido">
+        <button class="btn btn-primary my-2" onclick="createTicket()">Guardar Ticket</button>
+      </div>
+
+      <!-- Lista de Tickets -->
+      <div id="tickets-list"></div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
+    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC-0INsUQnbWPiw5iVdVWruHQlTfpvkbUQ",
+      authDomain: "ptickets-3cfc0.firebaseapp.com",
+      projectId: "ptickets-3cfc0",
+      storageBucket: "ptickets-3cfc0.firebasestorage.app",
+      messagingSenderId: "663829925829",
+      appId: "1:663829925829:web:fc3d7249af90f08756c5ac"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth();
+    const db = getFirestore();
+
+    const authSection = document.getElementById("auth-section");
+    const dashboard = document.getElementById("dashboard");
+    const userEmail = document.getElementById("user-email");
+    const ticketsList = document.getElementById("tickets-list");
+    const ticketForm = document.getElementById("create-ticket-form");
+
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        authSection.style.display = "none";
+        dashboard.style.display = "block";
+        userEmail.textContent = user.email;
+        loadTickets();
+      } else {
+        authSection.style.display = "block";
+        dashboard.style.display = "none";
+      }
+    });
+
+    window.register = async () => {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        Swal.fire("Registro exitoso");
+      } catch (e) {
+        Swal.fire("Error", e.message, "error");
+      }
+    }
+
+    window.login = async () => {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (e) {
+        Swal.fire("Error", e.message, "error");
+      }
+    }
+
+    window.logout = async () => {
+      await signOut(auth);
+    }
+
+    window.showCreateForm = () => {
+      ticketForm.style.display = ticketForm.style.display === "none" ? "block" : "none";
+    }
+
+    window.createTicket = async () => {
+      const title = document.getElementById("title").value;
+      const description = document.getElementById("description").value;
+      const priority = document.getElementById("priority").value;
+      const type = document.getElementById("type").value;
+      const user = auth.currentUser;
+      if (!title || !description || !priority || !type) return Swal.fire("Completa todos los campos");
+
+      try {
+        await addDoc(collection(db, "tickets"), {
+          title,
+          description,
+          priority,
+          type,
+          status: "Pendiente",
+          createdAt: new Date(),
+          userEmail: user.email
+        });
+        Swal.fire("Ticket creado con éxito");
+        ticketForm.style.display = "none";
+      } catch (e) {
+        Swal.fire("Error", e.message, "error");
+      }
+    }
+
+    function loadTickets() {
+      const q = query(collection(db, "tickets"), orderBy("createdAt", "desc"));
+      onSnapshot(q, snapshot => {
+        ticketsList.innerHTML = "";
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          ticketsList.innerHTML += `
+            <div class="card ticket-card">
+              <div class="card-body">
+                <h5 class="card-title">${data.title}</h5>
+                <p class="card-text">${data.description}</p>
+                <p class="mb-1"><strong>Prioridad:</strong> ${data.priority}</p>
+                <p class="mb-1"><strong>Estado:</strong> ${data.status}</p>
+                <p class="mb-1"><small>${new Date(data.createdAt.toDate()).toLocaleString()}</small></p>
+              </div>
+            </div>
+          `;
+        });
+      });
+    }
+  </script>
+</body>
+</html>
+
